@@ -14,6 +14,22 @@ namespace CadParsing.Helpers
             SelectionFilter borderFilter = CreateBorderFilter();
 
             PromptSelectionResult selectionResult = editor.SelectAll(borderFilter);
+
+            if (selectionResult.Status == PromptStatus.Error)
+            {
+                editor.WriteMessage(string.Format(
+                    "\n[WARN] BorderHelper.FindBorders: SelectAll returned Error." +
+                    "\n       Layer pattern : {0}" +
+                    "\n       This typically means no LWPOLYLINE/POLYLINE entities" +
+                    " exist on layer matching '{0}'.",
+                    Constants.BorderLayerPattern));
+                return new List<KeyValuePair<ObjectId, double>>();
+            }
+
+            editor.WriteMessage(string.Format(
+                "\n[DEBUG] BorderHelper.FindBorders: Status={0}, Count={1}",
+                selectionResult.Status,
+                selectionResult.Value != null ? selectionResult.Value.Count.ToString() : "null"));
             if (!HasResults(selectionResult))
                 return new List<KeyValuePair<ObjectId, double>>();
 

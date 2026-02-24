@@ -1,1 +1,162 @@
 # CadParsing
+
+A headless AutoCAD plugin (.NET Framework 4.8, C#, x64) that batch-processes `.dwg` files using Autodesk's `accoreconsole.exe`. It automatically binds external references, explodes block references, detects drawing borders, and exports each drawing to PDF — all without opening the AutoCAD GUI.
+
+---
+
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [How to Run](#how-to-run)
+- [AutoCAD Commands](#autocad-commands)
+- [Project Structure](#project-structure)
+- [License](#license)
+
+---
+
+## Prerequisites
+
+| Requirement | Version / Notes |
+|---|---|
+| **Windows** | Windows 10 / 11 (64-bit) |
+| **AutoCAD** | AutoCAD 2023 (provides `accoreconsole.exe` and the managed SDK DLLs) |
+| **.NET SDK** | Any SDK that supports `net48` (e.g., .NET Framework 4.8 or .NET SDK 6+) |
+| **PowerShell** | 5.1+ (ships with Windows; used internally by `BuildAndRun.bat`) |
+
+---
+
+## Installation
+
+1. **Clone the repository**
+
+   ```bat
+   git clone https://github.com/Kelvin-MY04/CadParsing.git
+   cd CadParsing
+   ```
+
+2. **Verify AutoCAD 2023 is installed**
+
+   Confirm that the following executable exists:
+
+   ```
+   C:\Program Files\Autodesk\AutoCAD 2023\accoreconsole.exe
+   ```
+
+   The `.csproj` also expects the AutoCAD managed SDK DLLs in that same directory (`accoremgd.dll`, `acdbmgd.dll`, `acmgd.dll`).
+
+---
+
+## Configuration
+
+All configuration is done in two places before the first run.
+
+### 1. `BuildAndRun.bat` — paths & directories
+
+Open `BuildAndRun.bat` and adjust the variables at the top of the file:
+
+```bat
+:: Path to the AutoCAD console executable
+set "ACCORE_EXE=C:\Program Files\Autodesk\AutoCAD 2023\accoreconsole.exe"
+
+:: Root folder that contains your downloaded DWG files
+set "DOWNLOAD_ROOT=C:\Users\<YourUsername>\Downloads"
+
+:: Folder where per-file logs will be written
+set "LOG_ROOT=C:\Users\<YourUsername>\Downloads\export\logs"
+```
+
+### 2. `dwg_path.txt` — input directories
+
+List one **absolute directory path** per line. `BuildAndRun.bat` will search each directory for `*.dwg` files and process them in order.
+
+```
+C:\Users\<YourUsername>\Downloads\project-a\drawings
+C:\Users\<YourUsername>\Downloads\project-b\drawings
+```
+
+### 3. `CadParsing\Constants.cs` — layer and export settings *(optional)*
+
+Fine-tune layer name patterns and export paths used by the AutoCAD commands:
+
+```csharp
+public const string BorderLayerPattern = "*PAPER-EX";   // layer glob for border detection
+public const string TextLayerPattern    = "*TEX";        // layer glob for text elements
+public const string BlockSuffix        = "\uc2dc\ud2b8"; // Korean: "시트"
+
+public const double TextHeight          = 400.0;         // expected text height (drawing units)
+public const double HeightTolerance     = 0.5;           // ± tolerance
+
+public const string DownloadRoot = @"C:\Users\<YourUsername>\Downloads";
+public const string ExportRoot   = @"C:\Users\<YourUsername>\Downloads\export\pdf";
+```
+
+---
+
+## How to Run
+
+From the repository root, double-click **`BuildAndRun.bat`** or run it from a Command Prompt:
+
+```bat
+.\BuildAndRun.bat
+```
+
+The script performs two steps automatically:
+
+| Step | Action |
+|---|---|
+| **[1/2] Build** | Compiles `CadParsing.csproj` in Debug mode targeting `net48 x64`. Aborts on build failure. |
+| **[2/2] Process** | Generates `RunProgram.scr`, then invokes `accoreconsole.exe` on every `*.dwg` file found in the directories listed in `dwg_path.txt`. A timestamped log file is written for each DWG under `LOG_ROOT`. |
+
+### Example output
+
+```
+[1/2] Building CadParsing (net48 x64 Debug)...
+Build succeeded.
+
+[2/2] Writing RunProgram.scr...
+
+[DIR] Processing directory: C:\Users\<YourUsername>\Downloads\project-a\drawings
+[OK] DWG file: C:\Users\<YourUsername>\Downloads\project-a\drawings\Sheet01.dwg
+[LOG] C:\Users\<YourUsername>\Downloads\export\logs\project-a\drawings\Sheet01\20250101_120000.log
+Running accoreconsole.exe...
+```
+
+---
+
+## AutoCAD Commands
+
+The plugin registers the following custom commands that are executed automatically via `RunProgram.scr`:
+
+| Command | Description |
+|---|---|
+| `LISTXREFLAYERS` | Lists all layers that belong to attached external references (XRefs). |
+| `BINDXREF` | Binds all attached XRefs into the host drawing. |
+| `EXPLODEBLOCK` | Explodes top-level block references into their constituent entities. |
+| `DETECTBORDER` | Detects the drawing border based on the `BorderLayerPattern` constant. |
+| `EXPORTPDF` | Exports the processed drawing to PDF in the configured `ExportRoot` directory. |
+
+---
+
+## Project Structure
+
+```
+CadParsing/
+├── CadParsing/
+│   ├── CadParsing.csproj   # .NET Framework 4.8 library project
+│   ├── CadParsingApp.cs    # IExtensionApplication entry point
+│   └── Constants.cs        # Layer patterns, tolerances, and path constants
+├── BuildAndRun.bat          # One-click build + batch processing script
+├── RunProgram.scr           # AutoCAD script (auto-generated by BuildAndRun.bat)
+├── dwg_path.txt             # List of directories containing .dwg files to process
+├── write_bat.ps1            # PowerShell helper to regenerate BuildAndRun.bat
+├── CadParsing.slnx          # Solution file
+└── LICENSE.txt              # MIT License
+```
+
+---
+
+## License
+
+This project is licensed under the **MIT License**. See [LICENSE.txt](LICENSE.txt) for the full text.

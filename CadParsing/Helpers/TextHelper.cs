@@ -1,29 +1,96 @@
 using System;
 using Autodesk.AutoCAD.DatabaseServices;
-using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
+using CadParsing.Configuration;
 
 namespace CadParsing.Helpers
 {
     internal static class TextHelper
     {
-        public static SelectionFilter CreateTextFilter()
+        public static string FindFloorPlanNameInModelSpace(
+            Transaction transaction, Database database, Extents3d borderExtents)
         {
-            return new SelectionFilter(new TypedValue[]
+            try
             {
-                new TypedValue((int)DxfCode.Operator,  "<AND"),
-                new TypedValue((int)DxfCode.Operator,  "<OR"),
-                new TypedValue((int)DxfCode.Start,     "TEXT"),
-                new TypedValue((int)DxfCode.Start,     "MTEXT"),
-                new TypedValue((int)DxfCode.Operator,  "OR>"),
-                new TypedValue((int)DxfCode.LayerName,  Constants.TextLayerPattern),
-                new TypedValue((int)DxfCode.Operator,  "AND>")
-            });
+                AppConfig config = ConfigLoader.Instance;
+                BlockTableRecord modelSpace =
+                    DatabaseHelper.GetModelSpaceBlock(transaction, database);
+
+                double bestHeight = double.MinValue;
+                string bestText = null;
+
+                foreach (ObjectId objectId in modelSpace)
+                {
+                    Entity entity = TryOpenEntity(transaction, objectId);
+                    if (entity == null) continue;
+
+                    if (!LayerNameMatcher.MatchesLayerSuffix(
+                            entity.Layer, config.TextLayerSuffix))
+                        continue;
+
+                    ExtractTextInfo(
+                        entity, out double height, out string textValue,
+                        out Point3d insertionPoint);
+
+                    if (height <= 0) continue;
+
+                    if (string.IsNullOrEmpty(textValue)) continue;
+
+                    if (!BoundsChecker.IsInsideBounds(
+                            insertionPoint.X, insertionPoint.Y,
+                            borderExtents.MinPoint.X, borderExtents.MinPoint.Y,
+                            borderExtents.MaxPoint.X, borderExtents.MaxPoint.Y))
+                        continue;
+
+                    if (height > bestHeight)
+                    {
+                        bestHeight = height;
+                        bestText = textValue;
+                    }
+                }
+
+                if (bestText == null)
+                {
+                    Console.WriteLine(
+                        "[WARN] TextHelper: No eligible TEX-layer text found inside border at ("
+                        + borderExtents.MinPoint.X + ", " + borderExtents.MinPoint.Y + ")-("
+                        + borderExtents.MaxPoint.X + ", " + borderExtents.MaxPoint.Y + ")");
+                }
+
+                return string.IsNullOrEmpty(bestText) ? null : bestText.Trim();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(
+                    "[ERROR] TextHelper.FindFloorPlanNameInModelSpace: " + ex.Message);
+                return null;
+            }
         }
 
-        public static bool MatchesTargetHeight(double height)
+        public static bool MatchesTargetHeight(double height, AppConfig config)
         {
-            return Math.Abs(height - Constants.TextHeight) <= Constants.HeightTolerance;
+            return Math.Abs(height - config.FloorPlanTextHeight) <= config.TextHeightTolerance;
+        }
+
+        public static void ExtractTextInfo(
+            Entity entity, out double height, out string textValue, out Point3d insertionPoint)
+        {
+            height = 0;
+            textValue = null;
+            insertionPoint = Point3d.Origin;
+
+            if (entity is DBText singleLineText)
+            {
+                height = singleLineText.Height;
+                textValue = singleLineText.TextString;
+                insertionPoint = singleLineText.Position;
+            }
+            else if (entity is MText multiLineText)
+            {
+                height = multiLineText.TextHeight;
+                textValue = MTextFormatStripper.Strip(multiLineText.Contents);
+                insertionPoint = multiLineText.Location;
+            }
         }
 
         public static string GetTextStyleName(Transaction transaction, ObjectId textStyleId)
@@ -34,76 +101,15 @@ namespace CadParsing.Helpers
             return styleRecord?.Name ?? "";
         }
 
-        public static string FindFloorPlanName(
-            Editor editor, Transaction transaction, Extents3d borderExtents)
+        private static Entity TryOpenEntity(Transaction transaction, ObjectId objectId)
         {
-            SelectionSet matchingTexts = SelectTextsInRegion(editor, borderExtents);
-            if (matchingTexts == null)
-                return null;
-
-            string floorPlanName = FindLargestMatchingText(transaction, matchingTexts);
-
-            return string.IsNullOrEmpty(floorPlanName) ? null : floorPlanName.Trim();
-        }
-
-        private static SelectionSet SelectTextsInRegion(
-            Editor editor, Extents3d regionExtents)
-        {
-            PromptSelectionResult selectionResult = editor.SelectCrossingWindow(
-                regionExtents.MinPoint, regionExtents.MaxPoint, CreateTextFilter());
-
-            if (selectionResult.Status != PromptStatus.OK
-                || selectionResult.Value == null
-                || selectionResult.Value.Count == 0)
-                return null;
-
-            return selectionResult.Value;
-        }
-
-        private static string FindLargestMatchingText(
-            Transaction transaction, SelectionSet textEntities)
-        {
-            double largestHeight = double.MinValue;
-            string largestText = null;
-
-            foreach (SelectedObject selectedObject in textEntities)
+            try
             {
-                if (selectedObject == null) continue;
-
-                Entity entity = transaction.GetObject(
-                    selectedObject.ObjectId, OpenMode.ForRead) as Entity;
-                if (entity == null) continue;
-
-                ExtractTextInfo(entity, out double height, out string textValue);
-
-                if (!MatchesTargetHeight(height))
-                    continue;
-
-                if (height > largestHeight)
-                {
-                    largestHeight = height;
-                    largestText = textValue;
-                }
+                return transaction.GetObject(objectId, OpenMode.ForRead) as Entity;
             }
-
-            return largestText;
-        }
-
-        public static void ExtractTextInfo(
-            Entity entity, out double height, out string textValue)
-        {
-            height = 0;
-            textValue = null;
-
-            if (entity is DBText singleLineText)
+            catch (Exception)
             {
-                height = singleLineText.Height;
-                textValue = singleLineText.TextString;
-            }
-            else if (entity is MText multiLineText)
-            {
-                height = multiLineText.TextHeight;
-                textValue = multiLineText.Contents;
+                return null;
             }
         }
     }

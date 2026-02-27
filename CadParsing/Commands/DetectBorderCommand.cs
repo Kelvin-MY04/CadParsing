@@ -5,6 +5,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
+using CadParsing.Configuration;
 using CadParsing.Helpers;
 
 namespace CadParsing.Commands
@@ -21,7 +22,7 @@ namespace CadParsing.Commands
             Database database = document.Database;
 
             List<KeyValuePair<ObjectId, double>> detectedBorders =
-                BorderHelper.FindBorders(database, editor);
+                BorderHelper.FindBordersInModelSpace(database);
 
             if (detectedBorders.Count == 0)
             {
@@ -47,7 +48,7 @@ namespace CadParsing.Commands
                     PrintBorderHeader(editor, borderIndex, detectedBorders.Count,
                         borderEntity, boundingBoxArea, borderExtents);
                     PrintVertices(editor, transaction, borderEntity);
-                    PrintTextsInBorder(editor, transaction, borderExtents);
+                    PrintTextsInBorder(editor, transaction, database, borderExtents);
 
                     editor.WriteMessage("\n=====================================================");
                 }
@@ -141,109 +142,105 @@ namespace CadParsing.Commands
         }
 
         private static void PrintTextsInBorder(
-            Editor editor, Transaction transaction, Extents3d borderExtents)
+            Editor editor, Transaction transaction,
+            Database database, Extents3d borderExtents)
         {
+            AppConfig config = ConfigLoader.Instance;
+
             editor.WriteMessage("\n-----------------------------------------------------");
             editor.WriteMessage(string.Format(
-                "\n  Texts inside border (TEX layer, Height={0}):", Constants.TextHeight));
+                "\n  Texts inside border ({0} layer, Height={1}):",
+                config.TextLayerSuffix, config.FloorPlanTextHeight));
             editor.WriteMessage("\n-----------------------------------------------------");
 
-            PromptSelectionResult selectionResult = editor.SelectCrossingWindow(
-                borderExtents.MinPoint, borderExtents.MaxPoint,
-                TextHelper.CreateTextFilter());
-
-            if (selectionResult.Status != PromptStatus.OK
-                || selectionResult.Value == null
-                || selectionResult.Value.Count == 0)
-            {
-                editor.WriteMessage("\n  (no text found in border)");
-                return;
-            }
+            BlockTableRecord modelSpace =
+                DatabaseHelper.GetModelSpaceBlock(transaction, database);
 
             int matchingTextCount = 0;
-            foreach (SelectedObject selectedObject in selectionResult.Value)
+
+            foreach (ObjectId objectId in modelSpace)
             {
-                if (selectedObject == null) continue;
+                Entity entity = TryOpenEntity(transaction, objectId);
+                if (entity == null) continue;
 
-                Entity textEntity = transaction.GetObject(
-                    selectedObject.ObjectId, OpenMode.ForRead) as Entity;
-                if (textEntity == null) continue;
-
-                if (TryPrintTextEntity(editor, transaction, textEntity, ref matchingTextCount))
+                if (!LayerNameMatcher.MatchesLayerSuffix(entity.Layer, config.TextLayerSuffix))
                     continue;
+
+                TextHelper.ExtractTextInfo(
+                    entity, out double height, out string textValue, out Point3d insertionPoint);
+
+                if (string.IsNullOrEmpty(textValue)) continue;
+
+                if (!TextHelper.MatchesTargetHeight(height, config)) continue;
+
+                if (!BoundsChecker.IsInsideBounds(
+                        insertionPoint.X, insertionPoint.Y,
+                        borderExtents.MinPoint.X, borderExtents.MinPoint.Y,
+                        borderExtents.MaxPoint.X, borderExtents.MaxPoint.Y))
+                    continue;
+
+                matchingTextCount++;
+                PrintTextEntity(editor, transaction, entity, matchingTextCount,
+                    height, insertionPoint, textValue);
             }
+
+            if (matchingTextCount == 0)
+                editor.WriteMessage("\n  (no matching text found in border)");
 
             editor.WriteMessage(string.Format("\n  Total texts: {0}", matchingTextCount));
         }
 
-        private static bool TryPrintTextEntity(
-            Editor editor, Transaction transaction,
-            Entity textEntity, ref int matchingTextCount)
+        private static Entity TryOpenEntity(Transaction transaction, ObjectId objectId)
         {
-            if (textEntity is DBText singleLineText)
-                return TryPrintSingleLineText(
-                    editor, transaction, singleLineText, ref matchingTextCount);
-
-            if (textEntity is MText multiLineText)
-                return TryPrintMultiLineText(
-                    editor, transaction, multiLineText, ref matchingTextCount);
-
-            return false;
+            try
+            {
+                return transaction.GetObject(objectId, OpenMode.ForRead) as Entity;
+            }
+            catch (System.Exception)
+            {
+                return null;
+            }
         }
 
-        private static bool TryPrintSingleLineText(
-            Editor editor, Transaction transaction,
-            DBText textEntity, ref int matchingTextCount)
+        private static void PrintTextEntity(
+            Editor editor, Transaction transaction, Entity entity,
+            int count, double height, Point3d insertionPoint, string textValue)
         {
-            if (!TextHelper.MatchesTargetHeight(textEntity.Height))
-                return false;
+            if (entity is DBText singleLineText)
+            {
+                string styleName = TextHelper.GetTextStyleName(
+                    transaction, singleLineText.TextStyleId);
 
-            matchingTextCount++;
-            string styleName = TextHelper.GetTextStyleName(transaction, textEntity.TextStyleId);
+                editor.WriteMessage(string.Format(
+                    "\n  [{0,3}] TEXT  Handle: {1}  Layer: {2}",
+                    count, entity.Handle, entity.Layer));
+                editor.WriteMessage(string.Format(
+                    "\n        Height  : {0:F4}  Rotation: {1:F4}\u00b0  Style: {2}",
+                    height, singleLineText.Rotation * (180.0 / Math.PI), styleName));
+                editor.WriteMessage(string.Format(
+                    "\n        Position: ({0:F4}, {1:F4}, {2:F4})",
+                    insertionPoint.X, insertionPoint.Y, insertionPoint.Z));
+                editor.WriteMessage(string.Format("\n        Value   : {0}", textValue));
+            }
+            else if (entity is MText multiLineText)
+            {
+                string styleName = TextHelper.GetTextStyleName(
+                    transaction, multiLineText.TextStyleId);
 
-            editor.WriteMessage(string.Format(
-                "\n  [{0,3}] TEXT  Handle: {1}  Layer: {2}",
-                matchingTextCount, textEntity.Handle, textEntity.Layer));
-            editor.WriteMessage(string.Format(
-                "\n        Height  : {0:F4}  Rotation: {1:F4}\u00b0  Style: {2}",
-                textEntity.Height,
-                textEntity.Rotation * (180.0 / Math.PI), styleName));
-            editor.WriteMessage(string.Format(
-                "\n        Position: ({0:F4}, {1:F4}, {2:F4})",
-                textEntity.Position.X, textEntity.Position.Y, textEntity.Position.Z));
-            editor.WriteMessage(string.Format(
-                "\n        Value   : {0}", textEntity.TextString));
-
-            return true;
-        }
-
-        private static bool TryPrintMultiLineText(
-            Editor editor, Transaction transaction,
-            MText textEntity, ref int matchingTextCount)
-        {
-            if (!TextHelper.MatchesTargetHeight(textEntity.TextHeight))
-                return false;
-
-            matchingTextCount++;
-            string styleName = TextHelper.GetTextStyleName(transaction, textEntity.TextStyleId);
-
-            editor.WriteMessage(string.Format(
-                "\n  [{0,3}] MTEXT Handle: {1}  Layer: {2}",
-                matchingTextCount, textEntity.Handle, textEntity.Layer));
-            editor.WriteMessage(string.Format(
-                "\n        Height  : {0:F4}  Rotation: {1:F4}\u00b0  Style: {2}",
-                textEntity.TextHeight,
-                textEntity.Rotation * (180.0 / Math.PI), styleName));
-            editor.WriteMessage(string.Format(
-                "\n        Location: ({0:F4}, {1:F4}, {2:F4})",
-                textEntity.Location.X, textEntity.Location.Y, textEntity.Location.Z));
-            editor.WriteMessage(string.Format(
-                "\n        Width   : {0:F4}  Attachment: {1}",
-                textEntity.Width, textEntity.Attachment));
-            editor.WriteMessage(string.Format(
-                "\n        Value   : {0}", textEntity.Contents));
-
-            return true;
+                editor.WriteMessage(string.Format(
+                    "\n  [{0,3}] MTEXT Handle: {1}  Layer: {2}",
+                    count, entity.Handle, entity.Layer));
+                editor.WriteMessage(string.Format(
+                    "\n        Height  : {0:F4}  Rotation: {1:F4}\u00b0  Style: {2}",
+                    height, multiLineText.Rotation * (180.0 / Math.PI), styleName));
+                editor.WriteMessage(string.Format(
+                    "\n        Location: ({0:F4}, {1:F4}, {2:F4})",
+                    insertionPoint.X, insertionPoint.Y, insertionPoint.Z));
+                editor.WriteMessage(string.Format(
+                    "\n        Width   : {0:F4}  Attachment: {1}",
+                    multiLineText.Width, multiLineText.Attachment));
+                editor.WriteMessage(string.Format("\n        Value   : {0}", textValue));
+            }
         }
     }
 }

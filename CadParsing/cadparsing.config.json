@@ -1,0 +1,9 @@
+{
+  "BorderLayerSuffix": "PAPER-EX",
+  "TextLayerSuffix": "TEX",
+  "FloorPlanTextHeight": 400.0,
+  "TextHeightTolerance": 0.5,
+  "AcceptClosedPolylinesOnly": true,
+  "DownloadRoot": "C:\\Users\\pphyo\\Downloads",
+  "ExportRoot": "C:\\Users\\pphyo\\Downloads\\export\\pdf"
+}

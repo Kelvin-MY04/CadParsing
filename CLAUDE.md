@@ -5,6 +5,8 @@ Auto-generated from all feature plans. Last updated: 2026-02-26
 ## Active Technologies
 - C# / .NET Framework 4.8 + AutoCAD 2023 SDK (plugin project only), NUnit 3.x (test project only) (002-fix-floor-plan-name)
 - N/A (DWG files read; PDF files written via AutoCAD plot engine) (002-fix-floor-plan-name)
+- C# / .NET Framework 4.8 + AutoCAD 2023 SDK (accoremgd.dll, acdbmgd.dll, acmgd.dll), (004-black-text-pdf)
+- N/A — DWG is read via AutoCAD SDK; PDF is written via AutoCAD plot engine; no (004-black-text-pdf)
 
 - C# (.NET Framework 4.8) + AutoCAD 2023 SDK (accoremgd.dll, acdbmgd.dll, acmgd.dll), NUnit 3.x (test project only) (001-fix-dwg-export-bugs)
 
@@ -24,6 +26,7 @@ tests/
 C# (.NET Framework 4.8): Follow standard conventions
 
 ## Recent Changes
+- 004-black-text-pdf: Added C# / .NET Framework 4.8 + AutoCAD 2023 SDK (accoremgd.dll, acdbmgd.dll, acmgd.dll),
 - 002-fix-floor-plan-name: Added C# / .NET Framework 4.8 + AutoCAD 2023 SDK (plugin project only), NUnit 3.x (test project only)
 
 - 001-fix-dwg-export-bugs: Added C# (.NET Framework 4.8) + AutoCAD 2023 SDK (accoremgd.dll, acdbmgd.dll, acmgd.dll), NUnit 3.x (test project only)

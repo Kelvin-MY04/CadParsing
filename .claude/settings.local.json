@@ -5,7 +5,17 @@
       "Bash(pwsh:*)",
       "Bash(powershell:*)",
       "Bash(dotnet test:*)",
-      "Bash(dotnet build:*)"
+      "Bash(dotnet build:*)",
+      "Bash(claude mcp:*)",
+      "mcp__linear-server__list_projects",
+      "mcp__linear-server__get_project",
+      "mcp__linear-server__get_user",
+      "mcp__linear-server__list_issue_statuses",
+      "mcp__linear-server__list_issue_labels",
+      "mcp__linear-server__save_issue",
+      "mcp__linear-server__list_issues",
+      "mcp__github__get_me",
+      "mcp__github__search_repositories"
     ]
   }
 }

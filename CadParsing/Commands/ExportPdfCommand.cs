@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
@@ -14,8 +15,12 @@ namespace CadParsing.Commands
 {
     public class ExportPdfCommand
     {
-        private static readonly string[] StyleSheets = { "acad.ctb", "monochrome.ctb" };
-        private static readonly string[] StyleSuffixes = { "_color", "_bw" };
+        private const string ColorStyleSheet = "acad.ctb";
+        private const string MonochromeStyleSheet = "monochrome.ctb";
+        private const string ColorStyleSuffix = "_color";
+        private const string MonochromeStyleSuffix = "_bw";
+        private static readonly string[] StyleSheets = { ColorStyleSheet, MonochromeStyleSheet };
+        private static readonly string[] StyleSuffixes = { ColorStyleSuffix, MonochromeStyleSuffix };
 
         [CommandMethod("EXPORTPDF")]
         public void ExportPdf()
@@ -76,6 +81,12 @@ namespace CadParsing.Commands
             editor.WriteMessage("\n");
         }
 
+        private static bool IsColorExport(string styleSheet)
+        {
+            return string.Equals(styleSheet, ColorStyleSheet,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
         private static void ExportAllBorders(
             Document document, Database database, Editor editor,
             List<KeyValuePair<ObjectId, double>> detectedBorders,
@@ -114,7 +125,8 @@ namespace CadParsing.Commands
                         document, editor, modelSpace, modelLayout,
                         borderExtents, drawingSubDirectory, borderLabel,
                         borderIndex, detectedBorders.Count,
-                        totalFileCount, ref currentFileNumber);
+                        totalFileCount, ref currentFileNumber,
+                        transaction, database);
                 }
 
                 transaction.Commit();
@@ -146,7 +158,8 @@ namespace CadParsing.Commands
             BlockTableRecord modelSpace, Layout modelLayout,
             Extents3d borderExtents, string drawingSubDirectory,
             string borderLabel, int borderIndex, int totalBorders,
-            int totalFileCount, ref int currentFileNumber)
+            int totalFileCount, ref int currentFileNumber,
+            Transaction transaction, Database database)
         {
             Point3d minPoint = borderExtents.MinPoint;
             Point3d maxPoint = borderExtents.MaxPoint;
@@ -163,9 +176,27 @@ namespace CadParsing.Commands
                     StyleSheets[styleIndex], currentFileNumber,
                     totalFileCount, minPoint, maxPoint, pdfFilePath);
 
-                ExportSinglePdf(document, editor, modelSpace, modelLayout,
-                    minPoint, maxPoint, StyleSheets[styleIndex],
-                    pdfFilePath, borderIndex, currentFileNumber, totalFileCount);
+                Dictionary<ObjectId, Color> savedColors = null;
+                if (IsColorExport(StyleSheets[styleIndex]))
+                {
+                    IReadOnlyList<ObjectId> textEntityIds =
+                        TextEntityFinder.FindAllTextEntities(transaction, database);
+                    savedColors = TextColorOverride.ApplyBlackOverride(
+                        transaction, textEntityIds, editor);
+                }
+
+                try
+                {
+                    ExportSinglePdf(document, editor, modelSpace, modelLayout,
+                        minPoint, maxPoint, StyleSheets[styleIndex],
+                        pdfFilePath, borderIndex, currentFileNumber, totalFileCount);
+                }
+                finally
+                {
+                    if (savedColors != null)
+                        TextColorOverride.RestoreOriginalColors(
+                            transaction, savedColors, editor);
+                }
             }
         }
 

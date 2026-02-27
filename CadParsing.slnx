@@ -1,3 +1,5 @@
 <Solution>
   <Project Path="CadParsing/CadParsing.csproj" />
+  <Project Path="CadParsing.Core/CadParsing.Core.csproj" />
+  <Project Path="CadParsing.Tests/CadParsing.Tests.csproj" />
 </Solution>

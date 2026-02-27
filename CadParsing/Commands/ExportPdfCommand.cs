@@ -7,6 +7,7 @@ using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.PlottingServices;
 using Autodesk.AutoCAD.Runtime;
+using CadParsing.Configuration;
 using CadParsing.Helpers;
 
 namespace CadParsing.Commands
@@ -26,7 +27,7 @@ namespace CadParsing.Commands
             Database database = document.Database;
 
             List<KeyValuePair<ObjectId, double>> detectedBorders =
-                BorderHelper.FindBorders(database, editor);
+                BorderHelper.FindBordersInModelSpace(database);
 
             if (detectedBorders.Count == 0)
             {
@@ -82,7 +83,8 @@ namespace CadParsing.Commands
         {
             using (Transaction transaction = database.TransactionManager.StartTransaction())
             {
-                BlockTableRecord modelSpace = GetModelSpaceBlock(transaction, database);
+                BlockTableRecord modelSpace =
+                    DatabaseHelper.GetModelSpaceBlock(transaction, database);
                 Layout modelLayout = (Layout)transaction.GetObject(
                     modelSpace.LayoutId, OpenMode.ForRead);
 
@@ -96,7 +98,15 @@ namespace CadParsing.Commands
                     Extents3d borderExtents = borderEntity.GeometricExtents;
 
                     string borderLabel = ResolveBorderLabel(
-                        editor, transaction, borderExtents, borderIndex);
+                        editor, transaction, database, borderExtents, borderIndex);
+
+                    if (string.IsNullOrEmpty(borderLabel))
+                    {
+                        editor.WriteMessage(string.Format(
+                            "\n[ERROR] Skipping border {0}: floor plan name not resolved.",
+                            borderIndex + 1));
+                        continue;
+                    }
 
                     Directory.CreateDirectory(drawingSubDirectory);
 
@@ -111,29 +121,24 @@ namespace CadParsing.Commands
             }
         }
 
-        private static BlockTableRecord GetModelSpaceBlock(
-            Transaction transaction, Database database)
-        {
-            BlockTable blockTable = (BlockTable)transaction.GetObject(
-                database.BlockTableId, OpenMode.ForRead);
-            return (BlockTableRecord)transaction.GetObject(
-                blockTable[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-        }
-
         private static string ResolveBorderLabel(
-            Editor editor, Transaction transaction,
+            Editor editor, Transaction transaction, Database database,
             Extents3d borderExtents, int borderIndex)
         {
-            string floorPlanName = TextHelper.FindFloorPlanName(
-                editor, transaction, borderExtents);
+            string floorPlanName = TextHelper.FindFloorPlanNameInModelSpace(
+                transaction, database, borderExtents);
 
-            string label = floorPlanName ?? (borderIndex + 1).ToString();
+            if (string.IsNullOrEmpty(floorPlanName))
+            {
+                editor.WriteMessage(string.Format(
+                    "\n[ERROR] Floor plan name not found for border {0}."
+                    + " Check TEX layer entities and height={1}.",
+                    borderIndex + 1, ConfigLoader.Instance.FloorPlanTextHeight));
+                return null;
+            }
 
-            editor.WriteMessage(string.Format(
-                "\n  FloorPlanName: {0}",
-                floorPlanName ?? "(none \u2014 using index " + (borderIndex + 1) + ")"));
-
-            return SanitizeFileName(label);
+            editor.WriteMessage(string.Format("\n  FloorPlanName: {0}", floorPlanName));
+            return SanitizeFileName(floorPlanName);
         }
 
         private static void ExportBorderWithAllStyles(
@@ -330,15 +335,16 @@ namespace CadParsing.Commands
 
         private static string ResolveOutputDirectory(string drawingFilePath)
         {
+            AppConfig config = ConfigLoader.Instance;
             string drawingDirectory = Path.GetDirectoryName(drawingFilePath);
 
             if (drawingDirectory.StartsWith(
-                Constants.DownloadRoot, StringComparison.OrdinalIgnoreCase))
+                config.DownloadRoot, StringComparison.OrdinalIgnoreCase))
             {
                 string relativeDirectory = drawingDirectory
-                    .Substring(Constants.DownloadRoot.Length)
+                    .Substring(config.DownloadRoot.Length)
                     .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                return Path.Combine(Constants.ExportRoot, relativeDirectory);
+                return Path.Combine(config.ExportRoot, relativeDirectory);
             }
 
             return drawingDirectory;

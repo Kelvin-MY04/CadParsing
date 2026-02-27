@@ -25,4 +25,14 @@
     </Reference>
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\CadParsing.Core\CadParsing.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="cadparsing.config.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

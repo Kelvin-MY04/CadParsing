@@ -35,5 +35,27 @@ namespace CadParsing.Tests.Unit
 
             Assert.That(result, Is.EqualTo(expected));
         }
+
+        [TestCase("A-TEXT", new[] { "TEXT", "TEX" }, true,
+            TestName = "MatchesFirstSuffix_ReturnsTrue")]
+        [TestCase("A-TEX", new[] { "TEXT", "TEX" }, true,
+            TestName = "MatchesSecondSuffix_ReturnsTrue")]
+        [TestCase("A-tex", new[] { "TEXT", "TEX" }, true,
+            TestName = "CaseInsensitiveMatch_ReturnsTrue")]
+        [TestCase("A-ANNO", new[] { "TEXT", "TEX" }, false,
+            TestName = "MatchesNoSuffix_ReturnsFalse")]
+        [TestCase(null, new[] { "TEXT", "TEX" }, false,
+            TestName = "NullLayerName_AnyLayerSuffix_ReturnsFalse")]
+        [TestCase("A-TEXT", new string[0], false,
+            TestName = "EmptySuffixArray_ReturnsFalse")]
+        [TestCase("A-TEXT", null, false,
+            TestName = "NullSuffixArray_ReturnsFalse")]
+        public void MatchesAnyLayerSuffix_VariousCases_ReturnsExpected(
+            string layerName, string[] suffixes, bool expected)
+        {
+            bool result = LayerNameMatcher.MatchesAnyLayerSuffix(layerName, suffixes);
+
+            Assert.That(result, Is.EqualTo(expected));
+        }
     }
 }

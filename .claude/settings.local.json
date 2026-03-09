@@ -15,7 +15,11 @@
       "mcp__linear-server__save_issue",
       "mcp__linear-server__list_issues",
       "mcp__github__get_me",
-      "mcp__github__search_repositories"
+      "mcp__github__search_repositories",
+      "mcp__linear-server__get_team",
+      "mcp__linear-server__list_milestones",
+      "mcp__linear-server__create_comment",
+      "mcp__linear-server__list_teams"
     ]
   }
 }

@@ -23,6 +23,7 @@ if %ERRORLEVEL% NEQ 0 (
 :: -- [2/2] Generate RunProgram.scr ------------------------------------------
 echo [2/2] Writing RunProgram.scr...
 powershell -NoProfile -Command "Set-Content -Path '%SCRIPT%' -Value 'NETLOAD', '%DLL%', 'LISTXREFLAYERS', 'BINDXREF', 'EXPLODEBLOCK', 'DETECTBORDER', 'EXPORTPDF' -Encoding ASCII"
+:: powershell -NoProfile -Command "Set-Content -Path '%SCRIPT%' -Value 'NETLOAD', '%DLL%', 'EXPLODEBLOCK', 'DETECTBORDER', 'EXPORTPDF' -Encoding ASCII"
 
 :: -- Process each directory from dwg_path.txt --------------------------------
 for /f "usebackq delims=" %%d in ("%ROOT%dwg_path.txt") do (

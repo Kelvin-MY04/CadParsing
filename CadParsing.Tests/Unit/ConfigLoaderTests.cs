@@ -11,7 +11,7 @@ namespace CadParsing.Tests.Unit
         public void LoadFromFile_ValidJson_LoadsAllFields()
         {
             string json = "{\"BorderLayerSuffix\":\"MY-BORDER\","
-                + "\"TextLayerSuffix\":\"MY-TEX\","
+                + "\"TextLayerSuffixes\":[\"MY-TEX\",\"MY-TEXT\"],"
                 + "\"FloorPlanTextHeight\":500.0,"
                 + "\"TextHeightTolerance\":1.0,"
                 + "\"AcceptClosedPolylinesOnly\":false,"
@@ -25,7 +25,7 @@ namespace CadParsing.Tests.Unit
                 AppConfig config = ConfigLoader.LoadFromFile(tempFile);
 
                 Assert.That(config.BorderLayerSuffix, Is.EqualTo("MY-BORDER"));
-                Assert.That(config.TextLayerSuffix, Is.EqualTo("MY-TEX"));
+                Assert.That(config.TextLayerSuffixes, Is.EqualTo(new[] { "MY-TEX", "MY-TEXT" }));
                 Assert.That(config.FloorPlanTextHeight, Is.EqualTo(500.0));
                 Assert.That(config.TextHeightTolerance, Is.EqualTo(1.0));
                 Assert.That(config.AcceptClosedPolylinesOnly, Is.False);
@@ -44,8 +44,8 @@ namespace CadParsing.Tests.Unit
             AppConfig config = ConfigLoader.LoadFromFile(
                 @"C:\nonexistent\path\cadparsing.config.json");
 
-            Assert.That(config.BorderLayerSuffix, Is.EqualTo("PAPER-EX"));
-            Assert.That(config.TextLayerSuffix, Is.EqualTo("TEX"));
+            Assert.That(config.BorderLayerSuffix, Is.EqualTo("Sheet"));
+            Assert.That(config.TextLayerSuffixes, Is.EqualTo(new[] { "TEXT", "TEX" }));
             Assert.That(config.FloorPlanTextHeight, Is.EqualTo(400.0));
             Assert.That(config.TextHeightTolerance, Is.EqualTo(0.5));
             Assert.That(config.AcceptClosedPolylinesOnly, Is.True);
@@ -60,8 +60,8 @@ namespace CadParsing.Tests.Unit
                 File.WriteAllText(tempFile, "this is not valid json {{{}");
                 AppConfig config = ConfigLoader.LoadFromFile(tempFile);
 
-                Assert.That(config.BorderLayerSuffix, Is.EqualTo("PAPER-EX"));
-                Assert.That(config.TextLayerSuffix, Is.EqualTo("TEX"));
+                Assert.That(config.BorderLayerSuffix, Is.EqualTo("Sheet"));
+                Assert.That(config.TextLayerSuffixes, Is.EqualTo(new[] { "TEXT", "TEX" }));
                 Assert.That(config.FloorPlanTextHeight, Is.EqualTo(400.0));
             }
             finally
@@ -73,14 +73,14 @@ namespace CadParsing.Tests.Unit
         [Test]
         public void LoadFromFile_EmptyBorderLayerSuffix_ReturnsDefaults()
         {
-            string json = "{\"BorderLayerSuffix\":\"\",\"TextLayerSuffix\":\"TEX\"}";
+            string json = "{\"BorderLayerSuffix\":\"\",\"TextLayerSuffixes\":[\"TEX\"]}";
             string tempFile = Path.GetTempFileName();
             try
             {
                 File.WriteAllText(tempFile, json);
                 AppConfig config = ConfigLoader.LoadFromFile(tempFile);
 
-                Assert.That(config.BorderLayerSuffix, Is.EqualTo("PAPER-EX"));
+                Assert.That(config.BorderLayerSuffix, Is.EqualTo("Sheet"));
             }
             finally
             {
@@ -89,16 +89,16 @@ namespace CadParsing.Tests.Unit
         }
 
         [Test]
-        public void LoadFromFile_EmptyTextLayerSuffix_ReturnsDefaults()
+        public void LoadFromFile_EmptyTextLayerSuffixes_ReturnsDefaults()
         {
-            string json = "{\"BorderLayerSuffix\":\"PAPER-EX\",\"TextLayerSuffix\":\"\"}";
+            string json = "{\"BorderLayerSuffix\":\"PAPER-EX\",\"TextLayerSuffixes\":[]}";
             string tempFile = Path.GetTempFileName();
             try
             {
                 File.WriteAllText(tempFile, json);
                 AppConfig config = ConfigLoader.LoadFromFile(tempFile);
 
-                Assert.That(config.TextLayerSuffix, Is.EqualTo("TEX"));
+                Assert.That(config.TextLayerSuffixes, Is.EqualTo(new[] { "TEXT", "TEX" }));
             }
             finally
             {

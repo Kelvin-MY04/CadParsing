@@ -24,8 +24,8 @@ namespace CadParsing.Helpers
                     Entity entity = TryOpenEntity(transaction, objectId);
                     if (entity == null) continue;
 
-                    if (!LayerNameMatcher.MatchesLayerSuffix(
-                            entity.Layer, config.TextLayerSuffix))
+                    if (!LayerNameMatcher.MatchesAnyLayerSuffix(
+                            entity.Layer, config.TextLayerSuffixes))
                         continue;
 
                     ExtractTextInfo(

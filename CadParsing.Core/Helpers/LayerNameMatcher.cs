@@ -11,5 +11,19 @@ namespace CadParsing.Helpers
 
             return layerName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
         }
+
+        public static bool MatchesAnyLayerSuffix(string layerName, string[] suffixes)
+        {
+            if (string.IsNullOrEmpty(layerName) || suffixes == null || suffixes.Length == 0)
+                return false;
+
+            foreach (string suffix in suffixes)
+            {
+                if (MatchesLayerSuffix(layerName, suffix))
+                    return true;
+            }
+
+            return false;
+        }
     }
 }

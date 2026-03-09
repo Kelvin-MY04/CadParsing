@@ -17,10 +17,8 @@ namespace CadParsing.Commands
     {
         private const string ColorStyleSheet = "acad.ctb";
         private const string MonochromeStyleSheet = "monochrome.ctb";
-        private const string ColorStyleSuffix = "_color";
-        private const string MonochromeStyleSuffix = "_bw";
         private static readonly string[] StyleSheets = { ColorStyleSheet, MonochromeStyleSheet };
-        private static readonly string[] StyleSuffixes = { ColorStyleSuffix, MonochromeStyleSuffix };
+        private static readonly string[] StyleSubFolders = { ExportPathBuilder.ColorPdfFolderName, ExportPathBuilder.BwPdfFolderName };
 
         [CommandMethod("EXPORTPDF")]
         public void ExportPdf()
@@ -54,6 +52,9 @@ namespace CadParsing.Commands
 
             string drawingSubDirectory = Path.Combine(
                 outputDirectory, Path.GetFileNameWithoutExtension(drawingFilePath));
+
+            Directory.CreateDirectory(drawingSubDirectory);
+            ExportPathBuilder.CreateTypeSubFolders(drawingSubDirectory);
 
             editor.WriteMessage("\n[INFO] Output directory: " + outputDirectory);
             editor.WriteMessage(string.Format(
@@ -102,31 +103,51 @@ namespace CadParsing.Commands
                 int totalFileCount = detectedBorders.Count * StyleSheets.Length;
                 int currentFileNumber = 0;
 
-                for (int borderIndex = 0; borderIndex < detectedBorders.Count; borderIndex++)
+                AppConfig config = ConfigLoader.Instance;
+                IReadOnlyList<ObjectId> targetTextEntityIds =
+                    TextFontOverride.FindTextEntitiesOnTargetLayers(
+                        transaction, database, config.TextLayerSuffixes);
+                ISet<ObjectId> fontLayerIds =
+                    LayerLockOverride.CollectLockedLayerIds(transaction, targetTextEntityIds);
+                Dictionary<ObjectId, bool> savedFontLayerLocks =
+                    LayerLockOverride.UnlockLayers(transaction, fontLayerIds, editor);
+                Dictionary<ObjectId, ObjectId> savedTextStyles =
+                    TextFontOverride.ApplyStandardFontOverride(
+                        transaction, targetTextEntityIds, database, editor);
+
+                try
                 {
-                    Entity borderEntity = transaction.GetObject(
-                        detectedBorders[borderIndex].Key, OpenMode.ForRead) as Entity;
-                    Extents3d borderExtents = borderEntity.GeometricExtents;
-
-                    string borderLabel = ResolveBorderLabel(
-                        editor, transaction, database, borderExtents, borderIndex);
-
-                    if (string.IsNullOrEmpty(borderLabel))
+                    for (int borderIndex = 0; borderIndex < detectedBorders.Count; borderIndex++)
                     {
-                        editor.WriteMessage(string.Format(
-                            "\n[ERROR] Skipping border {0}: floor plan name not resolved.",
-                            borderIndex + 1));
-                        continue;
+                        Entity borderEntity = transaction.GetObject(
+                            detectedBorders[borderIndex].Key, OpenMode.ForRead) as Entity;
+                        Extents3d borderExtents = borderEntity.GeometricExtents;
+
+                        string borderLabel = ResolveBorderLabel(
+                            editor, transaction, database, borderExtents, borderIndex);
+
+                        if (string.IsNullOrEmpty(borderLabel))
+                        {
+                            editor.WriteMessage(string.Format(
+                                "\n[ERROR] Skipping border {0}: floor plan name not resolved.",
+                                borderIndex + 1));
+                            continue;
+                        }
+
+                        ExportBorderWithAllStyles(
+                            document, editor, modelSpace, modelLayout,
+                            borderExtents, drawingSubDirectory, borderLabel,
+                            borderIndex, detectedBorders.Count,
+                            totalFileCount, ref currentFileNumber,
+                            transaction, database);
                     }
-
-                    Directory.CreateDirectory(drawingSubDirectory);
-
-                    ExportBorderWithAllStyles(
-                        document, editor, modelSpace, modelLayout,
-                        borderExtents, drawingSubDirectory, borderLabel,
-                        borderIndex, detectedBorders.Count,
-                        totalFileCount, ref currentFileNumber,
-                        transaction, database);
+                }
+                finally
+                {
+                    TextFontOverride.RestoreOriginalTextStyles(
+                        transaction, savedTextStyles, editor);
+                    LayerLockOverride.RestoreLayerLocks(
+                        transaction, savedFontLayerLocks, editor);
                 }
 
                 transaction.Commit();
@@ -168,19 +189,23 @@ namespace CadParsing.Commands
             {
                 currentFileNumber++;
 
-                string pdfFilePath = Path.Combine(drawingSubDirectory,
-                    string.Format("{0}{1}.pdf",
-                        borderLabel, StyleSuffixes[styleIndex]));
+                string pdfFilePath = ExportPathBuilder.BuildPdfPath(
+                    drawingSubDirectory, StyleSubFolders[styleIndex], borderLabel);
 
                 PrintExportHeader(editor, borderIndex, totalBorders,
                     StyleSheets[styleIndex], currentFileNumber,
                     totalFileCount, minPoint, maxPoint, pdfFilePath);
 
                 Dictionary<ObjectId, Color> savedColors = null;
+                Dictionary<ObjectId, bool> savedColorLayerLocks = null;
                 if (IsColorExport(StyleSheets[styleIndex]))
                 {
                     IReadOnlyList<ObjectId> textEntityIds =
                         TextEntityFinder.FindAllTextEntities(transaction, database);
+                    ISet<ObjectId> colorLayerIds =
+                        LayerLockOverride.CollectLockedLayerIds(transaction, textEntityIds);
+                    savedColorLayerLocks =
+                        LayerLockOverride.UnlockLayers(transaction, colorLayerIds, editor);
                     savedColors = TextColorOverride.ApplyBlackOverride(
                         transaction, textEntityIds, editor);
                 }
@@ -196,6 +221,9 @@ namespace CadParsing.Commands
                     if (savedColors != null)
                         TextColorOverride.RestoreOriginalColors(
                             transaction, savedColors, editor);
+                    if (savedColorLayerLocks != null)
+                        LayerLockOverride.RestoreLayerLocks(
+                            transaction, savedColorLayerLocks, editor);
                 }
             }
         }

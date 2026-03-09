@@ -150,7 +150,7 @@ namespace CadParsing.Commands
             editor.WriteMessage("\n-----------------------------------------------------");
             editor.WriteMessage(string.Format(
                 "\n  Texts inside border ({0} layer, Height={1}):",
-                config.TextLayerSuffix, config.FloorPlanTextHeight));
+                string.Join("/", config.TextLayerSuffixes), config.FloorPlanTextHeight));
             editor.WriteMessage("\n-----------------------------------------------------");
 
             BlockTableRecord modelSpace =
@@ -163,7 +163,7 @@ namespace CadParsing.Commands
                 Entity entity = TryOpenEntity(transaction, objectId);
                 if (entity == null) continue;
 
-                if (!LayerNameMatcher.MatchesLayerSuffix(entity.Layer, config.TextLayerSuffix))
+                if (!LayerNameMatcher.MatchesAnyLayerSuffix(entity.Layer, config.TextLayerSuffixes))
                     continue;
 
                 TextHelper.ExtractTextInfo(

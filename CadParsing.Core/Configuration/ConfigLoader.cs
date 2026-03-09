@@ -74,10 +74,10 @@ namespace CadParsing.Configuration
                 return new AppConfig();
             }
 
-            if (string.IsNullOrEmpty(config.TextLayerSuffix))
+            if (config.TextLayerSuffixes == null || config.TextLayerSuffixes.Length == 0)
             {
                 Console.WriteLine(
-                    "[WARN] ConfigLoader: TextLayerSuffix is empty in " + configFilePath
+                    "[WARN] ConfigLoader: TextLayerSuffixes is empty in " + configFilePath
                     + ". Using defaults.");
                 return new AppConfig();
             }
